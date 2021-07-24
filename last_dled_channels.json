@@ -96,9 +96,39 @@
         "last_date": "2021-07-18T14:26:15.409282"
     },
     {
-        "name": "CRYLLIC",
-        "url": "https://www.youtube.com/channel/UCOuJKaFuHEbibRdvnu_5YIA/videos",
-        "only_music": true,
+        "name": "Arditube",
+        "url": "https://www.youtube.com/c/InaArditube",
+        "only_music": false
+    },
+    {
+        "name": "INA Pierre Desproges",
+        "url": "https://www.youtube.com/c/InaPierreDesproges%C3%89tonnantnon",
+        "only_music": false,
         "last_date": "2021-07-18T14:26:19.232597"
+    },
+    {
+        "name": "Fantastic Music",
+        "url": "https://www.youtube.com/c/FantasticMusicLofi",
+        "only_music": true
+    },
+    {
+        "name": "Le ShadokTube",
+        "url": "https://www.youtube.com/c/ShadokTubepomp%C3%A9parinafretaaaproduction",
+        "only_music": false
+    },
+    {
+        "name": "Feardog",
+        "url": "https://www.youtube.com/c/FeardogMusic",
+        "only_music": true
+    },
+    {
+        "name": "TheSoundYouNeed",
+        "url": "https://www.youtube.com/thesoundyouneed",
+        "only_music": true
+    },
+    {
+        "name": "Dreamy",
+        "url": "https://www.youtube.com/channel/UCYVyQv2rUtCMxJAFSuOSpmg",
+        "only_music": true
     }
 ]
