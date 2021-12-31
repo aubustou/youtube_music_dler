@@ -3,32 +3,162 @@ import subprocess
 from datetime import datetime
 from json import JSONDecodeError
 from pathlib import Path
-from typing import cast, Optional, TypedDict
+from typing import Mapping, cast, Optional, TypedDict
 import re
 import eyed3
 from yt_dlp.YoutubeDL import YoutubeDL
+from yt_dlp.postprocessor.common import PostProcessor
+from yt_dlp.utils import DateRange, match_filter_func
+from mutagen.mp3 import MP3
+from mutagen.easyid3 import EasyID3
 
-MUSIC_PATH = Path("K:\Mp3\Boxon")
+MUSIC_PATH = Path().home() / "Musique"
 MUSIC_LIST = MUSIC_PATH / "musique.lst"
 CONFIG_PATH = Path.home() / ".yt-downloader"
 LAST_DLED_CHANNELS = CONFIG_PATH / "last_dled_channels.json"
 
 
-def download_music_(
+class MyLogger:
+    def debug(self, msg):
+        print(msg)
+
+    def warning(self, msg):
+        print(msg)
+
+    def error(self, msg):
+        print(msg)
+
+
+def dl_hook(d):
+    if d["status"] == "finished":
+        print("Done downloading, now converting ...")
+
+
+def pp_hook(d):
+    if d["status"] == "finished":
+        print("Done processing ...")
+
+
+def to_tags(file_: Path) -> None:
+    comment, album_pathname, _ = file_.parts[-3:]
+    try:
+        date, albumartist, album = (x.strip() for x in album_pathname.split("-", 3))
+    except (TypeError, ValueError):
+        date, album = (x.strip() for x in album_pathname.split("-", 2))
+        albumartist = comment
+
+    filename = file_.stem
+    for hyphen in ["–"]:
+        filename = filename.replace(hyphen, "-")
+
+    try:
+        tracknumber, artist, title = (x.strip() for x in filename.split("-", 3))
+    except (TypeError, ValueError):
+        tracknumber, title = (x.strip() for x in filename.split("-", 2))
+        artist = albumartist
+
+    date = f"{date[:4]}-{date[4:6]}-{date[6:]}"
+
+    print("Save tags on ", str(file_))
+
+    mp3file = MP3(file_, ID3=EasyID3)
+    mp3file["album"] = album
+    mp3file["albumartist"] = albumartist
+    mp3file["artist"] = artist
+    mp3file["date"] = date
+    mp3file["title"] = title
+    mp3file["tracknumber"] = "1" if tracknumber == "Full" else tracknumber
+
+    mp3file.save()
+
+
+class FileCleanerPostProcessor(PostProcessor):
+    def run(self, information: Mapping) -> tuple[list, Mapping]:
+        filepath = (
+            Path(information["filepath"]) if information.get("filepath") else None
+        )
+        if not filepath:
+            return [], information
+
+        files = list(filepath.parent.glob("*.mp3"))
+        if len(files) == 1:
+            to_tags(files[0])
+        else:
+            for file_ in files:
+                if file_.name.startswith("Full"):
+                    print("Remove full file " + str(file_))
+                    file_.unlink()
+                    continue
+
+                to_tags(file_)
+
+        return [], information
+
+
+def download_music_internal(
     name: str, url: str, only_music: bool = True, last_date: Optional[str] = None
 ):
-    ydl_opts = {}
+    print("Download: " + name)
+
+    ydl_opts = {
+        "match_filter": match_filter_func("!is_live"),  # --match-filter !is_live
+        "ignoreerrors": True,  # -i
+        "writeinfojson": True,  # --write-info-json
+        "overwrites": False,  # -w
+        "continue_dl": False,  # --no-continue
+        "updatetime": False,  # --no-mtime
+        "outtmpl": {
+            "default": r"%(channel)s/%(upload_date)s - %(title)s/Full - %(title)s.%(ext)s",
+            "chapter": r"%(channel)s/%(upload_date)s - %(title)s/%(section_number)d - %(section_title)s.%(ext)s",
+            "thumbnail": r"%(channel)s/%(upload_date)s - %(title)s/_ - thumbnail.%(ext)s",
+        },
+        "writethumbnail": True,
+        "format": "bestaudio/best",
+        "postprocessors": [
+            {
+                "key": "FFmpegSplitChapters",
+                "force_keyframes": False,
+            },
+            {
+                "key": "FFmpegThumbnailsConvertor",
+                "format": "jpg",
+                "when": "before_dl",
+            },
+        ],
+        "logger": MyLogger(),
+        "progress_hooks": [dl_hook],
+        "postprocessor_hooks": [pp_hook],
+        "paths": {"home": str(MUSIC_PATH)},
+    }
+
+    if only_music:
+        print("Only as music")
+        ydl_opts["postprocessors"].insert(
+            0,
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            },
+        )
+
+    if last_date:
+        dateafter = datetime.fromisoformat(last_date).strftime("%Y%m%d")
+        print("Only videos more recent than " + dateafter)
+        daterange = DateRange(dateafter, None)
+        ydl_opts.update(daterange=daterange)
     with YoutubeDL(ydl_opts) as ydl:
+        ydl.add_post_processor(FileCleanerPostProcessor())
         ydl.download([url])
 
 
-def download_music(
+def download_music_external(
     name: str, url: str, only_music: bool = True, last_date: Optional[str] = None
 ):
     print("Download: " + name)
     cmd = [
-        MUSIC_PATH / "yt-dlp.exe",
-        "--netrc",
+        "yt-dlp",
+        # "--netrc",
         "--match-filter",
         "!is_live",
         "--match-filter",
@@ -69,7 +199,10 @@ def download_music(
     if process.returncode:
         stderr = process.stderr.decode()
         print(stderr)
-        if "ERROR: This live stream recording is not available" in stderr or "ERROR: Sign in to confirm your age" in stderr:
+        if (
+            "ERROR: This live stream recording is not available" in stderr
+            or "ERROR: Sign in to confirm your age" in stderr
+        ):
             ignore_errors = True
 
     if only_music and (process.returncode == 0 or ignore_errors):
@@ -120,7 +253,7 @@ def download_music(
                 print("Save tags on ", str(path))
 
                 audiofile = eyed3.load(path)
-                if not audiofile.tag.artist:
+                if audiofile.tag and not audiofile.tag.artist:
                     audiofile.tag.artist = infos["artist"]
                     audiofile.tag.album = infos["album"]
                     audiofile.tag.album_artist = infos["album_artist"]
@@ -129,6 +262,12 @@ def download_music(
                     audiofile.tag.release_date = infos["year"][:4]
 
                     audiofile.tag.save()
+
+
+def download_music(
+    name: str, url: str, only_music: bool = True, last_date: Optional[str] = None
+):
+    download_music_internal(name, url, only_music, last_date)
 
 
 class Channel(TypedDict):
@@ -144,7 +283,8 @@ def main():
 
     try:
         last_dled_channels = cast(list[Channel], json.load(LAST_DLED_CHANNELS.open()))
-    except JSONDecodeError:
+    except JSONDecodeError as e:
+        print("Error while loading last_dled_channels: " + str(e))
         last_dled_channels = []
 
     for channel in last_dled_channels:
