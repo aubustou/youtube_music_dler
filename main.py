@@ -5,7 +5,6 @@ from json import JSONDecodeError
 from pathlib import Path
 from typing import Mapping, cast, Optional, TypedDict
 import re
-import eyed3
 from yt_dlp.YoutubeDL import YoutubeDL
 from yt_dlp.postprocessor.common import PostProcessor
 from yt_dlp.utils import DateRange, match_filter_func
@@ -251,17 +250,6 @@ def download_music_external(
                     continue
 
                 print("Save tags on ", str(path))
-
-                audiofile = eyed3.load(path)
-                if audiofile.tag and not audiofile.tag.artist:
-                    audiofile.tag.artist = infos["artist"]
-                    audiofile.tag.album = infos["album"]
-                    audiofile.tag.album_artist = infos["album_artist"]
-                    audiofile.tag.title = infos["title"]
-                    audiofile.tag.track_num = int(infos["track"])
-                    audiofile.tag.release_date = infos["year"][:4]
-
-                    audiofile.tag.save()
 
 
 def download_music(
