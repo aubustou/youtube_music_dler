@@ -1,15 +1,16 @@
 import json
+import re
 import subprocess
 from datetime import datetime
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Mapping, cast, Optional, TypedDict
-import re
-from yt_dlp.YoutubeDL import YoutubeDL
+from typing import Mapping, Optional, TypedDict, cast
+
+from mutagen.easyid3 import EasyID3
+from mutagen.mp3 import MP3
 from yt_dlp.postprocessor.common import PostProcessor
 from yt_dlp.utils import DateRange, match_filter_func
-from mutagen.mp3 import MP3
-from mutagen.easyid3 import EasyID3
+from yt_dlp.YoutubeDL import YoutubeDL
 
 MUSIC_PATH = Path().home() / "Musique"
 MUSIC_LIST = MUSIC_PATH / "musique.lst"
