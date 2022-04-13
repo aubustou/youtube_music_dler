@@ -8,6 +8,7 @@ from typing import Mapping, Optional, TypedDict, cast
 
 from mutagen.easyid3 import EasyID3
 from mutagen.mp3 import MP3
+from yt_dlp import parse_options
 from yt_dlp.postprocessor.common import PostProcessor
 from yt_dlp.utils import DateRange, match_filter_func
 from yt_dlp.YoutubeDL import YoutubeDL
@@ -100,7 +101,9 @@ def download_music_internal(
 ):
     print("Download: " + name)
 
-    ydl_opts = {
+    _, _, _, ydl_opts = parse_options()
+
+    ydl_opts.update({
         "match_filter": match_filter_func("!is_live"),  # --match-filter !is_live
         "ignoreerrors": True,  # -i
         "writeinfojson": True,  # --write-info-json
@@ -113,7 +116,6 @@ def download_music_internal(
             "thumbnail": r"%(channel)s/%(upload_date)s - %(title)s/_ - thumbnail.%(ext)s",
         },
         "writethumbnail": True,
-        "format": "bestaudio/best",
         "postprocessors": [
             {
                 "key": "FFmpegSplitChapters",
@@ -129,10 +131,13 @@ def download_music_internal(
         "progress_hooks": [dl_hook],
         "postprocessor_hooks": [pp_hook],
         "paths": {"home": str(MUSIC_PATH)},
-    }
+    })
 
     if only_music:
         print("Only as music")
+        ydl_opts.update({
+        "format": "bestaudio/best",
+        })
         ydl_opts["postprocessors"].insert(
             0,
             {
