@@ -10,7 +10,7 @@ from mutagen.easyid3 import EasyID3
 from mutagen.mp3 import MP3
 from yt_dlp import parse_options
 from yt_dlp.postprocessor.common import PostProcessor
-from yt_dlp.utils import DateRange, match_filter_func
+from yt_dlp.utils import DateRange, RejectedVideoReached, match_filter_func
 from yt_dlp.YoutubeDL import YoutubeDL
 
 MUSIC_PATH = Path().home() / "Musique"
@@ -103,41 +103,46 @@ def download_music_internal(
 
     _, _, _, ydl_opts = parse_options()
 
-    ydl_opts.update({
-        "match_filter": match_filter_func("!is_live"),  # --match-filter !is_live
-        "ignoreerrors": True,  # -i
-        "writeinfojson": True,  # --write-info-json
-        "overwrites": False,  # -w
-        "continue_dl": False,  # --no-continue
-        "updatetime": False,  # --no-mtime
-        "outtmpl": {
-            "default": r"%(channel)s/%(upload_date)s - %(title)s/Full - %(title)s.%(ext)s",
-            "chapter": r"%(channel)s/%(upload_date)s - %(title)s/%(section_number)d - %(section_title)s.%(ext)s",
-            "thumbnail": r"%(channel)s/%(upload_date)s - %(title)s/_ - thumbnail.%(ext)s",
-        },
-        "writethumbnail": True,
-        "postprocessors": [
-            {
-                "key": "FFmpegSplitChapters",
-                "force_keyframes": False,
+    ydl_opts.update(
+        {
+            "match_filter": match_filter_func("!is_live"),  # --match-filter !is_live
+            "ignoreerrors": True,  # -i
+            "writeinfojson": True,  # --write-info-json
+            "overwrites": False,  # -w
+            "continue_dl": False,  # --no-continue
+            "updatetime": False,  # --no-mtime
+            "outtmpl": {
+                "default": r"%(channel)s/%(upload_date)s - %(title)s/Full - %(title)s.%(ext)s",
+                "chapter": r"%(channel)s/%(upload_date)s - %(title)s/%(section_number)d - %(section_title)s.%(ext)s",
+                "thumbnail": r"%(channel)s/%(upload_date)s - %(title)s/_ - thumbnail.%(ext)s",
             },
-            {
-                "key": "FFmpegThumbnailsConvertor",
-                "format": "jpg",
-                "when": "before_dl",
-            },
-        ],
-        "logger": MyLogger(),
-        "progress_hooks": [dl_hook],
-        "postprocessor_hooks": [pp_hook],
-        "paths": {"home": str(MUSIC_PATH)},
-    })
+            "writethumbnail": True,
+            "postprocessors": [
+                {
+                    "key": "FFmpegSplitChapters",
+                    "force_keyframes": False,
+                },
+                {
+                    "key": "FFmpegThumbnailsConvertor",
+                    "format": "jpg",
+                    "when": "before_dl",
+                },
+            ],
+            "logger": MyLogger(),
+            "progress_hooks": [dl_hook],
+            "postprocessor_hooks": [pp_hook],
+            "paths": {"home": str(MUSIC_PATH)},
+            "break_on_reject": True,
+        }
+    )
 
     if only_music:
         print("Only as music")
-        ydl_opts.update({
-        "format": "bestaudio/best",
-        })
+        ydl_opts.update(
+            {
+                "format": "bestaudio/best",
+            }
+        )
         ydl_opts["postprocessors"].insert(
             0,
             {
@@ -152,9 +157,13 @@ def download_music_internal(
         print("Only videos more recent than " + dateafter)
         daterange = DateRange(dateafter, None)
         ydl_opts.update(daterange=daterange)
+
     with YoutubeDL(ydl_opts) as ydl:
         ydl.add_post_processor(FileCleanerPostProcessor())
-        ydl.download([url])
+        try:
+            ydl.download([url])
+        except RejectedVideoReached as e:
+            print("Boundary date reached. Passing")
 
 
 def download_music_external(
