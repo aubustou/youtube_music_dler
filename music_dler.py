@@ -13,6 +13,8 @@ from yt_dlp.postprocessor.common import PostProcessor
 from yt_dlp.utils import DateRange, RejectedVideoReached, match_filter_func
 from yt_dlp.YoutubeDL import YoutubeDL
 
+from .crop_covers import crop_edges
+
 MUSIC_PATH = Path().home() / "Musique"
 MUSIC_LIST = MUSIC_PATH / "musique.lst"
 CONFIG_PATH = Path.home() / ".yt-downloader"
@@ -92,6 +94,9 @@ class FileCleanerPostProcessor(PostProcessor):
                     continue
 
                 to_tags(file_)
+
+        if thumbnail := next(filepath.parent.glob("*.jpg"), None):
+            crop_edges(thumbnail, overwrite=True)
 
         return [], information
 
