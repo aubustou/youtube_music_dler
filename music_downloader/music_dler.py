@@ -55,9 +55,9 @@ def to_tags(file_: Path) -> None:
         filename = filename.replace(hyphen, "-")
 
     try:
-        tracknumber, artist, title = (x.strip() for x in filename.split("-", 3))
+        tracknumber, artist, title = (x.strip() for x in filename.split("-", 2))
     except (TypeError, ValueError):
-        tracknumber, title = (x.strip() for x in filename.split("-", 2))
+        tracknumber, title = (x.strip() for x in filename.split("-", 1))
         artist = albumartist
 
     date = f"{date[:4]}-{date[4:6]}-{date[6:]}"
