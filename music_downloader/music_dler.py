@@ -8,6 +8,7 @@ from typing import Mapping, Optional, TypedDict, cast
 
 from mutagen.easyid3 import EasyID3
 from mutagen.mp3 import MP3
+from progressbar import ProgressBar
 from yt_dlp import parse_options
 from yt_dlp.postprocessor.common import PostProcessor
 from yt_dlp.utils import DateRange, RejectedVideoReached, match_filter_func
@@ -23,7 +24,10 @@ LAST_DLED_CHANNELS = CONFIG_PATH / "last_dled_channels.json"
 
 class MyLogger:
     def debug(self, msg):
-        print(msg)
+        if msg.startswith("[download]"):
+            return
+        else:
+            print(msg)
 
     def warning(self, msg):
         print(msg)
@@ -32,9 +36,37 @@ class MyLogger:
         print(msg)
 
 
-def dl_hook(d):
-    if d["status"] == "finished":
+class DownloadStep(TypedDict):
+    status: str
+    downloaded_bytes: int
+    total_bytes: int
+    tmpfilename: str
+    filename: str
+    eta: int
+    speed: float
+    elapsed: float
+    ctx_id: None
+    info_dict: dict
+    _eta_str: str
+    _percent_str: str
+    _speed_str: str
+    _total_bytes_str: str
+    _default_template: str
+
+
+current_bar: Optional[ProgressBar] = None
+
+
+def dl_hook(dl_step: DownloadStep):
+    global current_bar
+
+    if dl_step["status"] == "finished":
         print("Done downloading, now converting ...")
+        if current_bar is not None:
+            current_bar = None
+    elif dl_step["status"] == "downloading":
+        current_bar = current_bar or ProgressBar(max_value=dl_step["total_bytes"])
+        current_bar.update(dl_step["downloaded_bytes"])
 
 
 def pp_hook(d):
@@ -45,9 +77,9 @@ def pp_hook(d):
 def to_tags(file_: Path) -> None:
     comment, album_pathname, _ = file_.parts[-3:]
     try:
-        date, albumartist, album = (x.strip() for x in album_pathname.split("-", 3))
+        date, albumartist, album = (x.strip() for x in album_pathname.split("-", 2))
     except (TypeError, ValueError):
-        date, album = (x.strip() for x in album_pathname.split("-", 2))
+        date, album = (x.strip() for x in album_pathname.split("-", 1))
         albumartist = comment
 
     filename = file_.stem
