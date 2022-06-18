@@ -4,10 +4,8 @@ import subprocess
 from datetime import datetime
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Mapping, Optional, TypedDict, cast
+from typing import Mapping, Optional, Pattern, TypedDict, cast
 
-from mutagen.easyid3 import EasyID3
-from mutagen.mp3 import MP3
 from progressbar import ProgressBar
 from yt_dlp import parse_options
 from yt_dlp.postprocessor.common import PostProcessor
@@ -15,6 +13,7 @@ from yt_dlp.utils import DateRange, RejectedVideoReached, match_filter_func
 from yt_dlp.YoutubeDL import YoutubeDL
 
 from .crop_covers import crop_edges
+from .tagger import tag_folder
 
 MUSIC_PATH = Path().home() / "Musique"
 MUSIC_LIST = MUSIC_PATH / "musique.lst"
@@ -74,37 +73,19 @@ def pp_hook(d):
         print("Done processing ...")
 
 
-def to_tags(file_: Path) -> None:
-    comment, album_pathname, _ = file_.parts[-3:]
-    try:
-        date, albumartist, album = (x.strip() for x in album_pathname.split("-", 2))
-    except (TypeError, ValueError):
-        date, album = (x.strip() for x in album_pathname.split("-", 1))
-        albumartist = comment
+COMMON_ALBUM_PATTERNS = [
+    re.compile(r"(?P<release_date>[0-9]{8}|NA) - (?P<album_artist>.*) - (?P<album>.*)"),
+    re.compile(r"(?P<release_date>[0-9]{8}|NA) - (?P<album>.*)"),
+]
+COMMON_TRACK_PATTERNS = [
+    re.compile(r"(?P<track_number>/d+) - (?P<artist>.*) - (?P<title>.*)"),
+    re.compile(r"(?P<track_number>/d+) - (?P<title>.*)"),
+    re.compile(r"(?P<track_number>Full) - (?P<artist>.*) - (?P<title>.*)"),
+    re.compile(r"(?P<track_number>Full) - (?P<title>.*)"),
+]
 
-    filename = file_.stem
-    for hyphen in ["–"]:
-        filename = filename.replace(hyphen, "-")
-
-    try:
-        tracknumber, artist, title = (x.strip() for x in filename.split("-", 2))
-    except (TypeError, ValueError):
-        tracknumber, title = (x.strip() for x in filename.split("-", 1))
-        artist = albumartist
-
-    date = f"{date[:4]}-{date[4:6]}-{date[6:]}"
-
-    print("Save tags on ", str(file_))
-
-    mp3file = MP3(file_, ID3=EasyID3)
-    mp3file["album"] = album
-    mp3file["albumartist"] = albumartist
-    mp3file["artist"] = artist
-    mp3file["date"] = date
-    mp3file["title"] = title
-    mp3file["tracknumber"] = "1" if tracknumber == "Full" else tracknumber
-
-    mp3file.save()
+CURRENT_PUBLISHER_ALBUM_PATTERNS: list[Pattern] = []
+CURRENT_PUBLISHER_TRACK_PATTERNS: list[Pattern] = []
 
 
 class FileCleanerPostProcessor(PostProcessor):
@@ -115,26 +96,29 @@ class FileCleanerPostProcessor(PostProcessor):
         if not filepath:
             return [], information
 
-        files = list(filepath.parent.glob("*.mp3"))
-        if len(files) == 1:
-            to_tags(files[0])
-        else:
-            for file_ in files:
-                if file_.name.startswith("Full"):
-                    print("Remove full file " + str(file_))
-                    file_.unlink()
-                    continue
+        parent_folder = filepath.parent
+        publisher, album_pathname = parent_folder.parts[-2:]
 
-                to_tags(file_)
-
-        if thumbnail := next(filepath.parent.glob("*.jpg"), None):
+        if thumbnail := next(parent_folder.glob("*.jpg"), None):
             crop_edges(thumbnail, overwrite=True)
+
+        tag_folder(
+            parent_folder,
+            CURRENT_PUBLISHER_ALBUM_PATTERNS + COMMON_ALBUM_PATTERNS,
+            CURRENT_PUBLISHER_TRACK_PATTERNS + COMMON_TRACK_PATTERNS,
+            thumbnail,
+        )
 
         return [], information
 
 
-def download_music_internal(
-    name: str, url: str, only_music: bool = True, last_date: Optional[str] = None
+def download_music(
+    name: str,
+    url: str,
+    only_music: bool = True,
+    last_date: Optional[str] = None,
+    album_regexes: Optional[list[str]] = None,
+    track_regexes: Optional[list[str]] = None,
 ):
     print("Download: " + name)
 
@@ -195,6 +179,16 @@ def download_music_internal(
         daterange = DateRange(dateafter, None)
         ydl_opts.update(daterange=daterange)
 
+    global CURRENT_PUBLISHER_ALBUM_PATTERNS
+    CURRENT_PUBLISHER_ALBUM_PATTERNS = []
+    for regex in album_regexes or []:
+        CURRENT_PUBLISHER_ALBUM_PATTERNS.append(re.compile(regex))
+
+    global CURRENT_PUBLISHER_TRACK_PATTERNS
+    CURRENT_PUBLISHER_TRACK_PATTERNS = []
+    for regex in track_regexes or []:
+        CURRENT_PUBLISHER_TRACK_PATTERNS.append(re.compile(regex))
+
     with YoutubeDL(ydl_opts) as ydl:
         ydl.add_post_processor(FileCleanerPostProcessor())
         try:
@@ -203,118 +197,13 @@ def download_music_internal(
             print("Boundary date reached. Passing")
 
 
-def download_music_external(
-    name: str, url: str, only_music: bool = True, last_date: Optional[str] = None
-):
-    print("Download: " + name)
-    cmd = [
-        "yt-dlp",
-        # "--netrc",
-        "--match-filter",
-        "!is_live",
-        "--match-filter",
-        "!was_live",
-        "-i",
-        "--write-info-json",
-        "-w",
-        "--no-continue",
-        "--no-mtime",
-        "--split-chapters",
-    ]
-
-    if only_music:
-        cmd += [
-            "-x",
-            "--audio-format",
-            "mp3",
-        ]
-    if last_date:
-        cmd += ["--dateafter", datetime.fromisoformat(last_date).strftime("%Y%m%d")]
-
-    cmd += [
-        "-o",
-        "%(channel)s\%(upload_date)s - %(title)s\Full - %(title)s.%(ext)s",
-        "-o",
-        "chapter:%(channel)s\%(upload_date)s - %(title)s\%(section_number)d - %(section_title)s.%(ext)s",
-        "--write-thumbnail",
-        "-o",
-        "thumbnail:%(channel)s\%(upload_date)s - %(title)s\_ - thumbnail.%(ext)s",
-        "--convert-thumbnails",
-        "jpg",
-        url,
-    ]
-    process = subprocess.run(cmd, cwd=MUSIC_PATH, shell=True, capture_output=True)
-
-    ignore_errors = False
-
-    if process.returncode:
-        stderr = process.stderr.decode()
-        print(stderr)
-        if (
-            "ERROR: This live stream recording is not available" in stderr
-            or "ERROR: Sign in to confirm your age" in stderr
-        ):
-            ignore_errors = True
-
-    if only_music and (process.returncode == 0 or ignore_errors):
-        output = process.stdout.decode(errors="ignore")
-        full_files = re.findall(r"\[download\] Destination:\s(.*)", output)
-
-        if not full_files:
-            return
-
-        artist_folder_path = MUSIC_PATH / Path(full_files[0]).parents[1]
-        for music_folder in artist_folder_path.iterdir():
-            if not music_folder.is_dir():
-                continue
-            if list(music_folder.glob("1 - *.mp3")):
-                full_file_path = next((music_folder.glob("Full - *.mp3")), None)
-                if full_file_path:
-                    print("Remove full fill as chapters exist: ", str(full_file_path))
-                    full_file_path.unlink()
-
-            for file_ in music_folder.glob("*.mp3"):
-                infos = {}
-
-                match = re.match(
-                    r"(?P<album_artist>.*)\\(?P<year>[0-9]{8}) - (?P<album>.*)\\(?P<track>[0-9]+) - (?P<artist>.*) (?:-|–) (?P<title>.*).mp3",
-                    str(file_),
-                )
-
-                if match:
-                    infos = match.groupdict()
-
-                else:
-                    match = re.match(
-                        r".*\\(?P<year>[0-9]{8}) - (?P<album_artist>.*) - (?P<album>.*)\\Full - (?P<artist>.*) (?:-|–) (?P<title>.*).mp3",
-                        str(file_),
-                    )
-                    if match:
-                        infos = match.groupdict()
-                        infos["track"] = 1
-
-                if not infos:
-                    continue
-
-                path = MUSIC_PATH / Path(file_)
-                if not path.exists():
-                    # Problème d'encodage certainement
-                    continue
-
-                print("Save tags on ", str(path))
-
-
-def download_music(
-    name: str, url: str, only_music: bool = True, last_date: Optional[str] = None
-):
-    download_music_internal(name, url, only_music, last_date)
-
-
 class Channel(TypedDict):
     name: str
     url: str
     only_music: bool
     last_date: str
+    album_regexes: list[str]
+    track_regexes: list[str]
 
 
 def main():
@@ -333,6 +222,8 @@ def main():
             channel["url"],
             channel.get("only_music", True),
             channel.get("last_date"),
+            channel.get("album_regexes", []),
+            channel.get("track_regexes", []),
         )
         channel["last_date"] = datetime.now().isoformat()
 
