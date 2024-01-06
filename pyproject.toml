@@ -1,10 +1,48 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "music-downloader"
+description = "Get your music from your favorite YT channels. Keep track of dled musics."
+version = "1.1"
+authors = [
+    { name = "aubustou", email = "survivalfr@yahoo.fr" }
+]
+dependencies = [
+    "yt-dlp",
+    "mutagen",
+    "numpy",
+    "opencv-python",
+    "progressbar2",
+]
+license = "MIT"
+
+[project.optional-dependencies]
+dev = [
+    "pdbpp",
+    "mypy",
+    "ruff",
+    "black",
+    "bandit",
+    "pytest",
+]
+
+[project.scripts]
+music-dler = "music_downloader.music_dler:main"
+crop-covers = "music_downloader.crop_covers:main"
+
+[tool.setuptools.packages]
+find = {namespaces = false}
+
+[tool.autoflake]
+remove_all_unused_imports = true
+ignore_init_module_imports = true
+
 
 [tool.black]
 line-length = 88
-target-version = ['py39']
+target-version = ['py311']
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -20,3 +58,6 @@ exclude = '''
   | dist
 )/
 '''
+
+[tool.isort]
+profile = 'black'

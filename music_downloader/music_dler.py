@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import subprocess
 from datetime import datetime
@@ -78,8 +79,8 @@ COMMON_ALBUM_PATTERNS = [
     re.compile(r"(?P<release_date>[0-9]{8}|NA) - (?P<album>.*)"),
 ]
 COMMON_TRACK_PATTERNS = [
-    re.compile(r"(?P<track_number>/d+) - (?P<artist>.*) - (?P<title>.*)"),
-    re.compile(r"(?P<track_number>/d+) - (?P<title>.*)"),
+    re.compile(r"(?P<track_number>\d+) - (?P<artist>.*) - (?P<title>.*)"),
+    re.compile(r"(?P<track_number>\d+) - (?P<title>.*)"),
     re.compile(r"(?P<track_number>Full) - (?P<artist>.*) - (?P<title>.*)"),
     re.compile(r"(?P<track_number>Full) - (?P<title>.*)"),
 ]
@@ -120,7 +121,7 @@ def download_music(
     album_regexes: Optional[list[str]] = None,
     track_regexes: Optional[list[str]] = None,
 ):
-    print("Download: " + name)
+    logging.info("Downloading music from %s", name)
 
     _, _, _, ydl_opts = parse_options()
 
@@ -209,6 +210,8 @@ class Channel(TypedDict):
 def main():
     CONFIG_PATH.mkdir(exist_ok=True)
     LAST_DLED_CHANNELS.touch(exist_ok=True)
+
+    logging.basicConfig()
 
     try:
         last_dled_channels = cast(list[Channel], json.load(LAST_DLED_CHANNELS.open()))

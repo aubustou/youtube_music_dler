@@ -15,7 +15,7 @@ PREFIXES = [
     "the ",
     "le ",
     "la ",
-    "les",
+    "les ",
     "l'",
     "die ",
     "der ",
@@ -23,6 +23,7 @@ PREFIXES = [
     "de ",
     "el ",
     "los ",
+    "las ",
 ]
 
 
@@ -55,8 +56,7 @@ def tag_folder(
             break
 
     if not (album and release_date):
-        pass
-        # breakpoint()
+        print(f"Problem with album and release date on {album_pathname}")
 
     if len(release_date) == 8:
         release_date = f"{release_date[:4]}-{release_date[4:6]}-{release_date[6:]}"
@@ -183,31 +183,34 @@ def to_tags(
 
 
 def main():
-    UNDERRATED_ALBUM_PATTERNS = [
-        re.compile(
-            r"(?:[0-9]{8}|NA) - (?P<album_artist>.*)(?:\s)*- (?P<album>.*) \(Full (?:Album|EP) (?P<release_date>\d+)\)"
-        ),
-        re.compile(
-            r"(?:[0-9]{8}|NA) - (?P<album_artist>.*) - (?P<album>.*) (?P<release_date>\d+)"
-        ),
+    CURRENT_ALBUM_PATTERNS = [
+        # re.compile(
+        #     r"(?:[0-9]{8}|NA) - (?P<album_artist>.*)(?:\s)*- (?P<album>.*) \(Full (?:Album|EP) (?P<release_date>\d+)\)"
+        # ),
+        # re.compile(
+        #     r"(?:[0-9]{8}|NA) - (?P<album_artist>.*) - (?P<album>.*) (?P<release_date>\d+)"
+        # ),
         re.compile(
             r"(?:[0-9]{8}|NA) - (?P<album_artist>.*) - (?P<album>.*) \((?P<release_date>\d+)\)"
         ),
+        re.compile(
+            r"(?:[0-9]{8}|NA) - (?P<album_artist>.*) ' (?P<album>.*) -(?:\s*)\((?P<release_date>\d+)\)"
+        ),
     ]
-    UNDERRATED_TRACK_PATTERNS = [
-        re.compile(r"(?P<track_number>\d+) - (?:\d+)(?:\s)*\.(?:\s)*(?P<title>.*)"),
-        re.compile(r"(?P<track_number>\d+) - (?:\d+)(?:\s)*-(?:\s)*(?P<title>.*)"),
-        re.compile(r"(?P<track_number>\d+) - (?:\d+) (?P<title>.*)"),
+    CURRENT_TRACK_PATTERNS = [
+        re.compile(r"(?P<track_number>\d+) - (?:\d+\w*)(?:\s)*\.(?:\s)*(?P<title>.*)"),
+        # re.compile(r"(?P<track_number>\d+) - (?:\d+)(?:\s)*-(?:\s)*(?P<title>.*)"),
+        # re.compile(r"(?P<track_number>\d+) - (?:\d+) (?P<title>.*)"),
     ]
 
-    from .music_dler import COMMON_ALBUM_PATTERNS, COMMON_TRACK_PATTERNS
+    from music_downloader.music_dler import COMMON_ALBUM_PATTERNS, COMMON_TRACK_PATTERNS
 
-    for folder in Path("/home/aubustou/Musique/Underrated Albums").iterdir():
+    for folder in Path("/home/aubustou/Musique/chansons françaises").iterdir():
         thumbnail = next(folder.glob("*.jpg"), None)
         tag_folder(
             folder,
-            UNDERRATED_ALBUM_PATTERNS + COMMON_ALBUM_PATTERNS,
-            UNDERRATED_TRACK_PATTERNS + COMMON_TRACK_PATTERNS,
+            CURRENT_ALBUM_PATTERNS + COMMON_ALBUM_PATTERNS,
+            CURRENT_TRACK_PATTERNS + COMMON_TRACK_PATTERNS,
             thumbnail,
         )
 
