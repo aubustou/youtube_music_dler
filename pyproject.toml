@@ -16,7 +16,7 @@ dependencies = [
     "opencv-python",
     "progressbar2",
 ]
-license = "MIT"
+license = {text ="MIT"}
 
 [project.optional-dependencies]
 dev = [
